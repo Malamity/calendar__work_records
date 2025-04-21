@@ -1,0 +1,3 @@
+*.json
+/myenv
+.DS_Store
