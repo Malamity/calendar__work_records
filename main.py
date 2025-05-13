@@ -205,6 +205,17 @@ def remove_event(service, ID: str, calendar_id='primary'):
         print(f'An error occured: {e}')
 
 
+def check_upcoming_events(events: list[dict]) -> list:
+    upcoming_events = []
+    for event in events:
+        if event['summary'] == 'Praca':
+            upcoming_events.append(str(event['end']['dateTime'])[:10])
+        elif event['summary'] == 'Urlop':
+            upcoming_events.append(str(event['end']['date'])[:10])
+
+    return upcoming_events
+
+
 def main():
     # now_date = datetime.datetime.now().date()
     creds = auth_google_calendar(SCOPES)
@@ -226,30 +237,38 @@ def main():
         next_week_firstday = last_day + datetime.timedelta(days=1)
         next_week_lastday = next_week_firstday + datetime.timedelta(days=(5 - next_week_firstday.isoweekday()))
 
-    print(f'next_week_first_day: {next_week_firstday}')
-    print(f'next_week_last_day: {next_week_lastday}\n')
-    next_week_delta = (next_week_lastday - next_week_firstday).days
+    if next_week_firstday > last_day + datetime.timedelta(days=7):
+        pass
+    else:
+        print(f'next_week_first_day: {next_week_firstday}')
+        print(f'next_week_last_day: {next_week_lastday}\n')
+        next_week_delta = (next_week_lastday - next_week_firstday).days
 
-    print(f'Work Holidays')
-    work_holidays = get_work_holidays(check_event(service, start_date=str(next_week_firstday)))
-    work_holidays_str = ', '.join(str(day) for day in work_holidays)
-    print(f'Work holidays: {work_holidays_str}\n')
+        print(f'Work Holidays')
+        upcoming_week = check_event(service, start_date=str(next_week_firstday))
+        print(f'Upcoming week:')
+        upcoming_week_list = check_upcoming_events(upcoming_week)
+        work_holidays = get_work_holidays(upcoming_week)
+        # work_holidays_str = ', '.join(str(day) for day in work_holidays)
+        # print(f'Work holidays: {work_holidays_str}\n')
 
-    for i in range(next_week_delta + 1):
-        day = next_week_firstday + datetime.timedelta(days=i)
+        for i in range(next_week_delta + 1):
+            day = next_week_firstday + datetime.timedelta(days=i)
 
-        if str(day) not in PL_Holidays_list:
-            if str(day) not in work_holidays:
-                if day.isoweekday() <= 5:
-                    print(f'day: {day}')
-                    day = str(day) + 'T08:00:00.000000'
-                    day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
-                    add_work_event(service, day)
+            if str(day) not in PL_Holidays_list:
+                if str(day) not in work_holidays:
+                    if str(day) not in upcoming_week_list:
+                        if day.isoweekday() <= 5:
+                            print(f'day: {day}')
+                            day = str(day) + 'T08:00:00.000000'
+                            day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
+                            add_work_event(service, day)
 
-    print(f'Remove_work_day')
-    event_ids = remove_work_day(event_check)
-    print(f'event_ids: {event_ids}')
-    # for id in event_ids:
+        print()
+        print(f'Remove_work_day')
+        event_ids = remove_work_day(event_check)
+        print(f'event_ids: {event_ids}')
+        # for id in event_ids:
     #     remove_event(service, id)
 
 
