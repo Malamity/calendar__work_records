@@ -2,3 +2,4 @@
 /myenv
 .DS_Store
 test.py
+__pycache__/main.cpython-312.pyc

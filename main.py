@@ -40,6 +40,7 @@ def add_event(
     end_time,
     timezone='Europe/Warsaw',
 ) -> None:
+    # Add event to calendar
     event = {
         'summary': summary,
         'start': {'dateTime': start_time.isoformat(), 'timeZone': timezone},
@@ -50,14 +51,16 @@ def add_event(
 
 
 def add_work_event(service, start_time) -> None:
+    # Add work event specific for 7 hour work day
     end_time = start_time + datetime.timedelta(hours=7)
     add_event(service, 'Praca', start_time, end_time)
 
 
-def check_event(service, max_results=10, start_date='now', last_week: bool = True, days: int = 0) -> list[dict]:
+def check_event(service, max_results=10, start_date='now', next_week: bool = True, days: int = 0) -> list[dict]:
+    # Check event list, default return 10 records from today until the next two weeks
     events = []
     if days != 0:
-        last_week = False
+        next_week = False
 
     if start_date == 'now':
         now = datetime.datetime.now(datetime.timezone.utc).date()
@@ -68,15 +71,15 @@ def check_event(service, max_results=10, start_date='now', last_week: bool = Tru
         start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
         now = datetime.datetime.combine(start_date, datetime.time(0, 0, 0, tzinfo=datetime.UTC))
 
-    if last_week and days == 0:
+    if next_week and days == 0:
         time_min = (now - datetime.timedelta(days=(now.isoweekday() - 1))).isoformat()
         time_max = (now + datetime.timedelta(days=14 + now.isoweekday() - 1)).isoformat()
-    elif not last_week and days != 0:
+    elif not next_week and days != 0:
         time_min = (now - datetime.timedelta(days=(now.isoweekday() - 1))).isoformat()
         time_max = (now + datetime.timedelta(days=days - now.isoweekday())).isoformat()
 
-    print(f'Check event time_min: {str(time_min)[:10]}')
-    print(f'Check event time_max: {str(time_max)[:10]}\n')
+    # print(f'Check event time_min: {str(time_min)[:10]}')
+    # print(f'Check event time_max: {str(time_max)[:10]}\n')
 
     # print(f'Getting upcoming {max_results} events')
     events_result = (
@@ -94,6 +97,7 @@ def check_event(service, max_results=10, start_date='now', last_week: bool = Tru
 
     event_list = events_result.get('items', [])
 
+    # return events without 'Birthdays' (preadded in callendar)
     for event in event_list:
         event_type = event.get('eventType', '').lower()
         if event_type != 'birthday':
@@ -104,6 +108,7 @@ def check_event(service, max_results=10, start_date='now', last_week: bool = Tru
 
 
 def last_work_day(events: list[dict]) -> datetime.datetime.date:
+    # returns last day as datetime, checks last event (if list isn't empty),
     last_day = ''
     if len(events) == 0:
         last_day = datetime.datetime.now().date()
@@ -154,7 +159,7 @@ def remove_work_day(events: list[dict]) -> list:
     if len(events) == 0:
         pass
     else:
-        print(f'Events: {len(events)}')
+        # print(f'Events: {len(events)}')
         # print(f'{events}')
         event_holidays = []
         event_work = []
@@ -206,22 +211,22 @@ def remove_event(service, ID: str, calendar_id='primary'):
 
 
 def check_upcoming_events(events: list[dict]) -> list:
+    # Check for upcoming events, function makes sure that if event occurs in list it won't be duplicated
     upcoming_events = []
     for event in events:
         if event['summary'] == 'Praca':
             upcoming_events.append(str(event['end']['dateTime'])[:10])
         elif event['summary'] == 'Urlop':
-            upcoming_events.append(str(event['end']['date'])[:10])
-
+            end_date = datetime.datetime.strptime(event['end']['date'], '%Y-%m-%d').date()
+            end_date = end_date - datetime.timedelta(days=1)
+            upcoming_events.append(str(end_date))
     return upcoming_events
 
 
-def main():
-    # now_date = datetime.datetime.now().date()
-    creds = auth_google_calendar(SCOPES)
+def add_work_events(creds):
+    events_added = 0
     service = build('calendar', 'V3', credentials=creds)
-
-    event_check = check_event(service, max_results=50, last_week=False, days=7)
+    event_check = check_event(service, max_results=50, next_week=False, days=7)
 
     last_day = last_work_day(event_check)
     print(f'Last work day: {last_day}\n')
@@ -246,30 +251,40 @@ def main():
 
         print(f'Work Holidays')
         upcoming_week = check_event(service, start_date=str(next_week_firstday))
-        print(f'Upcoming week:')
         upcoming_week_list = check_upcoming_events(upcoming_week)
         work_holidays = get_work_holidays(upcoming_week)
-        # work_holidays_str = ', '.join(str(day) for day in work_holidays)
-        # print(f'Work holidays: {work_holidays_str}\n')
 
         for i in range(next_week_delta + 1):
             day = next_week_firstday + datetime.timedelta(days=i)
 
-            if str(day) not in PL_Holidays_list:
-                if str(day) not in work_holidays:
-                    if str(day) not in upcoming_week_list:
-                        if day.isoweekday() <= 5:
-                            print(f'day: {day}')
-                            day = str(day) + 'T08:00:00.000000'
-                            day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
-                            add_work_event(service, day)
+            if str(day) not in PL_Holidays_list and str(day) not in work_holidays:
+                # print(f'Day not holidays: {day}')
+                # print(f'Upcoming weeklist: {upcoming_week_list}')
+                if str(day) not in upcoming_week_list:
+                    if day.isoweekday() <= 5:
+                        print(f'day: {day}')
+                        day = str(day) + 'T08:00:00.000000'
+                        day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
+                        add_work_event(service, day)
+                        events_added += 1
+        if events_added == 0:
+            print(f'Events not added!')
 
-        print()
-        print(f'Remove_work_day')
-        event_ids = remove_work_day(event_check)
+
+def main():
+    # now_date = datetime.datetime.now().date()
+    creds = auth_google_calendar(SCOPES)
+    add_work_events(creds)
+    service = build('calendar', 'V3', credentials=creds)
+    event_check = check_event(service, max_results=20, next_week=False, days=14)
+    # print()
+    # print(f'Remove_work_day')
+
+    event_ids = remove_work_day(event_check)
+    if len(event_ids) != 0:
         print(f'event_ids: {event_ids}')
-        # for id in event_ids:
-    #     remove_event(service, id)
+        for id in event_ids:
+            remove_event(service, id)
 
 
 if __name__ == '__main__':
