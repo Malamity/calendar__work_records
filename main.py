@@ -27,7 +27,7 @@ def auth_google_calendar(scopes, credentials_path='credentials.json', token_path
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(credentials_path, scopes)
-            creds = flow.run_local_server(port=0)
+            creds = flow.run_local_server(port=0, access_type='offline', prompt='consent')
         with open(token_path, 'w') as token:
             token.write(creds.to_json())
     return creds
@@ -45,6 +45,7 @@ def add_event(
         'summary': summary,
         'start': {'dateTime': start_time.isoformat(), 'timeZone': timezone},
         'end': {'dateTime': end_time.isoformat(), 'timeZone': timezone},
+        'reminders': {'useDefault': False},
     }
     created_event = service.events().insert(calendarId='primary', body=event).execute()
     print(f'Event created: {created_event.get('htmlLink')}')
@@ -65,7 +66,7 @@ def check_event(service, max_results=10, start_date='now', next_week: bool = Tru
     if start_date == 'now':
         now = datetime.datetime.now(datetime.timezone.utc).date()
         now = datetime.datetime.combine(now, datetime.time(0, 0, 0, tzinfo=datetime.UTC))
-        # now = datetime.datetime(2025, 5, 10, 0, 0, 0, 0, tzinfo=datetime.UTC)  # TEST ONLY
+        # now = datetime.datetime(2025, 6, 20, 0, 0, 0, 0, tzinfo=datetime.UTC)  # TEST ONLY
 
     else:
         start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -235,40 +236,38 @@ def add_work_events(creds):
     next_week_lastday = ''
     # print(f'last_day.isoweekday(): {last_day} {last_day.isoweekday()}')
     if last_day.isoweekday() >= 5:
-        print(f'last_day: {last_day} - {last_day.isoweekday()}')
+        # print(f'last_day: {last_day} - {last_day.isoweekday()}')
         next_week_firstday = last_day + datetime.timedelta(days=(8 - last_day.isoweekday()))
         next_week_lastday = next_week_firstday + datetime.timedelta(days=5)
     else:
         next_week_firstday = last_day + datetime.timedelta(days=1)
         next_week_lastday = next_week_firstday + datetime.timedelta(days=(5 - next_week_firstday.isoweekday()))
 
-    if next_week_firstday > last_day + datetime.timedelta(days=7):
-        pass
-    else:
-        print(f'next_week_first_day: {next_week_firstday}')
-        print(f'next_week_last_day: {next_week_lastday}\n')
-        next_week_delta = (next_week_lastday - next_week_firstday).days
+    # if next_week_firstday > last_day + datetime.timedelta(days=7):
+    #     pass
+    # else:
+    print(f'Next week first day: {next_week_firstday}')
+    print(f'Next week last day: {next_week_lastday}\n')
+    next_week_delta = (next_week_lastday - next_week_firstday).days
 
-        print(f'Work Holidays')
-        upcoming_week = check_event(service, start_date=str(next_week_firstday))
-        upcoming_week_list = check_upcoming_events(upcoming_week)
-        work_holidays = get_work_holidays(upcoming_week)
+    # print(f'Work Holidays')
+    upcoming_week = check_event(service, start_date=str(next_week_firstday))
+    upcoming_week_list = check_upcoming_events(upcoming_week)
+    work_holidays = get_work_holidays(upcoming_week)
 
-        for i in range(next_week_delta + 1):
-            day = next_week_firstday + datetime.timedelta(days=i)
+    for i in range(next_week_delta + 1):
+        day = next_week_firstday + datetime.timedelta(days=i)
 
-            if str(day) not in PL_Holidays_list and str(day) not in work_holidays:
-                # print(f'Day not holidays: {day}')
-                # print(f'Upcoming weeklist: {upcoming_week_list}')
-                if str(day) not in upcoming_week_list:
-                    if day.isoweekday() <= 5:
-                        print(f'day: {day}')
-                        day = str(day) + 'T08:00:00.000000'
-                        day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
-                        add_work_event(service, day)
-                        events_added += 1
-        if events_added == 0:
-            print(f'Events not added!')
+        if str(day) not in PL_Holidays_list and str(day) not in work_holidays:
+            if str(day) not in upcoming_week_list:
+                if day.isoweekday() <= 5:
+                    print(f'day: {day}')
+                    day = str(day) + 'T08:00:00.000000'
+                    day = datetime.datetime.strptime(day, '%Y-%m-%dT%H:%M:%S.%f')
+                    add_work_event(service, day)
+                    events_added += 1
+    if events_added == 0:
+        print(f'Events not added!')
 
 
 def main():
